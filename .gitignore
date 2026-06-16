@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test artifacts
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Project runtime artifacts
+testmind/results/
+testmind/logs/
+*.log
+
+# Sensitive files - NEVER upload
+AGENTS.md
+REQUIREMENTS.md
+
+# Node modules (for .opencode)
+node_modules/
+
+# OpenCode runtime data
+.opencode/node_modules/
+.opencode/.gitignore

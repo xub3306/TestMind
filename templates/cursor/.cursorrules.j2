@@ -1,0 +1,61 @@
+# TestMind Project Rules
+
+## 项目信息
+
+- 项目名：{{ project_name }}
+- 基地址：{{ base_url }}
+- 认证类型：{{ auth_type }}
+
+## TestMind 工作流
+
+TestMind 是 MCP Server + Agent 混合架构的智能测试平台。MCP 工具只做执行，不做决策——决策由你（Agent）完成。
+
+### 核心流程
+
+1. 获取 API 规范 → `fetch_url` / `discover_spec` / `parse_spec`
+2. 分析需求 → `save_requirements`（如有需求文档）
+3. 生成用例 → `validate_case` + `save_case`
+4. 执行用例 → `run_cases`
+5. 分析结果 → `get_results`
+
+### MCP 工具清单
+
+| 工具 | 功能 |
+|------|------|
+| `discover_spec` | 自动发现 API 规范 URL |
+| `fetch_url` | 下载 URL 内容到本地 |
+| `parse_spec` | 解析标准 Spec → api-spec.json |
+| `save_spec` | 保存提取结果 → api-spec.json |
+| `save_requirements` | 保存需求 → business-requirements.json |
+| `validate_case` | 校验用例格式 |
+| `save_case` | 保存用例到项目 |
+| `list_cases` | 列出项目用例 |
+| `run_cases` | 执行用例集 |
+| `get_results` | 获取执行结果 |
+| `init_project` | 初始化项目 |
+| `get_config` | 获取项目配置 |
+
+### 工具使用优先级
+
+- 有标准 Swagger/OpenAPI URL → `fetch_url` → `parse_spec`（最准确）
+- 有非标准文档 → Agent 阅读 → `save_spec` / `save_requirements`
+- 需要自动发现 → `discover_spec`
+
+## 用例设计原则
+
+- 覆盖正向、逆向、边界、异常四种场景
+- 用例 ID 格式：`TC-{TYPE}-{MODULE}-{SEQ}`
+- `error_flows` → 逆向用例
+- `business_rules` → 边界值用例
+- 认证信息使用环境变量注入，不硬编码
+
+## 结果分析
+
+根因分类：server_error / client_error / data_issue / env_issue / auth_failure / timeout / unknown
+
+## 关键约束
+
+- 用例执行必须确定性——同一用例多次运行结果一致
+- MCP 工具只做执行，不做决策
+- 用例数据本地存储，用户数据不外传
+- 敏感信息通过环境变量注入，不在 JSON 中明文存储

@@ -1,0 +1,36 @@
+{
+  "name": "{{ project_name }}",
+  "description": "{{ project_description | default('') }}",
+  "type": "{{ project_type | default('api') }}",
+  "base_url": "{{ base_url }}",
+  {% if auth_type != "none" %}
+  "auth": {
+    "type": "{{ auth_type }}",
+    {% if auth_type == "bearer" %}
+    "token_env": "{{ project_name | upper }}_API_TOKEN"
+    {% elif auth_type == "basic" %}
+    "username_env": "{{ project_name | upper }}_USERNAME",
+    "password_env": "{{ project_name | upper }}_PASSWORD"
+    {% elif auth_type == "api_key" %}
+    "key_env": "{{ project_name | upper }}_API_KEY",
+    "header_name": "X-API-Key"
+    {% elif auth_type == "oauth2" %}
+    "token_env": "{{ project_name | upper }}_OAUTH_TOKEN",
+    "client_id_env": "{{ project_name | upper }}_CLIENT_ID",
+    "client_secret_env": "{{ project_name | upper }}_CLIENT_SECRET"
+    {% endif %}
+  },
+  {% endif %}
+  "default_env": "{{ default_env | default('dev') }}",
+  "specs": [],
+  "tags": [],
+  "timeout": {{ timeout | default(30) }},
+  "retry": {{ retry | default(0) }},
+  "variables": {},
+  {% if project_type == "api" or project_type == "web" %}
+  "proxy": null,
+  {% endif %}
+  "verify_ssl": {{ verify_ssl | default(true) | lower }},
+  "setup": [],
+  "teardown": []
+}

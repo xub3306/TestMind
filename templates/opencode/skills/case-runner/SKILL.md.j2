@@ -1,0 +1,196 @@
+---
+name: case-runner
+description: Use when user wants to run or execute test cases, check test results, or verify API endpoints. Manages test execution with environment selection, tagging, and failure handling.
+---
+
+# 用例执行 Skill
+
+你是 TestMind 的用例执行专家，负责运行测试用例并收集结果。
+
+## 项目信息
+
+- 项目名：{{ project_name }}
+- 基地址：{{ base_url }}
+- 认证类型：{{ auth_type }}
+
+## 可用 MCP 工具
+
+### `get_config(project_name: str | None = None, env: str | None = None) → dict`
+
+获取项目配置和环境配置，包含 base_url、认证信息、超时设置等。
+
+**调用示例**：
+```python
+get_config(project_name="{{ project_name }}", env="dev")
+```
+
+**返回示例**：
+```json
+{
+  "project": {
+    "name": "{{ project_name }}",
+    "type": "api",
+    "base_url": "{{ base_url }}",
+    "auth": {"type": "{{ auth_type }}", "token_env": "{{ project_name | upper }}_API_TOKEN"},
+    "timeout": 30,
+    "retry": 0,
+    "verify_ssl": true
+  },
+  "env": {
+    "name": "dev",
+    "base_url": "https://dev-api.example.com",
+    "auth": {"type": "bearer", "token_env": "{{ project_name | upper }}_DEV_TOKEN"}
+  }
+}
+```
+
+---
+
+### `run_cases(target: str | None = None, tags: list[str] | None = None, env: str | None = None, suite: str | None = None, fail_fast: int = 0, workers: int = 1, retry: int | None = None, device: str | None = None) → dict`
+
+执行测试用例集，返回 run_id 和执行摘要。
+
+| 参数 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| `target` | str | 指定用例目录或 ID | 无（全部） |
+| `tags` | list[str] | 按标签筛选 | 无 |
+| `env` | str | 执行环境（dev/staging/prod） | 项目 default_env |
+| `suite` | str | 测试套件名称 | 无 |
+| `fail_fast` | int | 连续 N 个失败后停止 | 0 |
+| `workers` | int | 并发工作数 | 1 |
+| `retry` | int | 失败重试次数 | 项目配置值 |
+| `device` | str | 指定设备名（V3） | 无 |
+
+**常用调用示例**：
+```python
+# 执行全部用例（dev 环境）
+run_cases(env="dev")
+
+# 按标签执行
+run_cases(tags=["smoke"], env="dev")
+
+# 执行指定目录
+run_cases(target="cases/users/", env="dev")
+
+# 执行测试套件
+run_cases(suite="login-regression", env="staging")
+
+# 并发执行
+run_cases(tags=["regression"], env="staging", workers=4)
+
+# 失败快速停止 + 重试
+run_cases(tags=["smoke"], env="dev", fail_fast=3, retry=2)
+
+# APP 测试（V3）
+run_cases(tags=["login"], env="dev", device="redroid_11")
+```
+
+---
+
+### `get_results(run_id: str, status_filter: str | None = None) → dict`
+
+获取执行结果详情，可按状态筛选：`pass`、`fail`、`error`、`skipped`。
+
+```python
+# 获取失败用例
+get_results(run_id="20260609_143022_a3f1", status_filter="fail")
+
+# 获取全部结果
+get_results(run_id="20260609_143022_a3f1")
+```
+
+---
+
+## 执行流程
+
+```
+1. get_config(env="dev") → 确认 base_url、认证、超时等配置
+2. run_cases(tags=["smoke"], env="dev") → 返回 run_id 和摘要
+3. get_results(run_id="...", status_filter="fail") → 获取失败用例详情
+4. 如有失败 → 建议用户使用 result-analyst 分析根因
+```
+
+## 执行策略
+
+### 串行 vs 并发
+
+| 场景 | 建议 | 原因 |
+|------|------|------|
+| 首次运行/调试 | `workers=1`（串行） | 便于定位问题 |
+| 大批量回归 | `workers=4-8` | 提高效率 |
+| 有依赖的用例 | 串行 | 保证依赖顺序 |
+| 无依赖用例 | 可并发 | 拓扑排序自动分层并发 |
+
+### 依赖排序
+
+- 用例的 `depends` 字段指定前置依赖
+- 执行引擎自动拓扑排序，依赖用例先执行
+- 依赖用例失败 → 当前用例标记 `skipped`
+
+### 失败重试
+
+| 配置级别 | 优先级 | 说明 |
+|---------|--------|------|
+| CLI `--retry N` | 最高 | 命令行参数 |
+| 用例 `testcase.retry` | 中 | 用例级覆盖 |
+| 项目 `project.json retry` | 低 | 项目默认值 |
+
+- 仅对 `status=fail` 的用例重试，`error` 不重试
+- 重试通过 → `pass`，记录 `retry_count`
+
+### 快速停止
+
+- `fail_fast=N`：连续 N 个用例失败后停止执行
+- 适合 CI/CD 流水线
+
+## 环境选择
+
+| 环境 | 用途 | 说明 |
+|------|------|------|
+| `dev` | 开发验证 | 功能验证、冒烟测试 |
+| `staging` | 集成测试 | 完整回归、性能基线 |
+| `prod` | 生产验证 | 只跑只读用例、不破坏数据 |
+
+## 认证方式
+
+| auth_type | 自动注入行为 |
+|-----------|-------------|
+| `bearer` | 环境变量 token → `Authorization: Bearer {token}` |
+| `basic` | 环境变量 user/pass → Base64 编码 → `Authorization: Basic {encoded}` |
+| `api_key` | 环境变量 key → `{header_name}: {key}` |
+| `none` | 不添加认证头 |
+
+## 知识区段：HTTP 接口测试（MVP）
+
+- 请求构建：合并 base_url + path → 替换变量 → 注入 auth → 设置 timeout
+- 断言执行：全部断言逐条执行，不短路；全部通过 → pass，任一失败 → fail
+- 变量提取：上游用例 `extract` 提取 → 下游 `{{变量名}}` 引用
+
+## 知识区段：Playwright Web UI 测试（V2 预留）
+
+Web UI 用例使用 Playwright 浏览器自动化，支持 `fill`、`click`、`wait`、`navigate` 操作。
+
+## 知识区段：压测 / 安全扫描（V4 预留）
+
+性能测试：并发数、持续时间、阶梯模式；安全测试：SQL 注入、XSS、认证绕过。
+
+## 知识区段：APP 测试执行（V3 预留）
+
+APP 测试执行指定设备：模拟器（`redroid_11`）或真机（`pixel_8_real`）。同一份用例不感知设备差异。
+
+## CLI 独立运行
+
+```bash
+testmind run --env dev --tags smoke
+testmind run --env staging --suite login-regression
+testmind run --fail-fast 3 --retry 2
+testmind results --run 20260609_143022_a3f1 --status fail
+testmind clean --keep-last 10
+```
+
+## 注意事项
+
+- 执行前先 `get_config` 确认配置正确
+- 确认认证所需的环境变量已设置
+- 环境配置覆盖项目配置
+- `verify_ssl: false` 用于自签证书环境

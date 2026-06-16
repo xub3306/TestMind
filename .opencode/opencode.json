@@ -1,0 +1,38 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["AGENTS.md"],
+  "default_agent": "testmind",
+  "skills": {
+    "paths": [".opencode/skills"]
+  },
+  "agent": {
+    "testmind": {
+      "description": "TestMind开发主代理：协调子代理完成TestMind项目开发，负责架构决策和任务分发。",
+      "mode": "primary"
+    },
+    "models-agent": {
+      "description": "负责TestMind数据模型定义（testmind/models/），无外部依赖，优先开发。",
+      "mode": "subagent"
+    },
+    "core-agent": {
+      "description": "负责TestMind核心执行逻辑（testmind/core/），依赖models。",
+      "mode": "subagent"
+    },
+    "tools-spec-agent": {
+      "description": "负责规范解析相关MCP工具（discover_spec, fetch_url, parse_spec, save_spec, save_requirements），依赖models。",
+      "mode": "subagent"
+    },
+    "tools-api-agent": {
+      "description": "负责测试执行相关MCP工具（validate_case, save_case, run_cases, get_results, list_cases, project_tools），依赖models和core。",
+      "mode": "subagent"
+    },
+    "skills-agent": {
+      "description": "负责编写用户侧Skill文件（.claude/skills/和templates/），纯markdown，不涉及Python代码。",
+      "mode": "subagent"
+    }
+  },
+  "permission": {
+    "edit": "allow",
+    "bash": "allow"
+  }
+}
