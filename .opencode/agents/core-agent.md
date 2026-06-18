@@ -15,7 +15,7 @@ mode: subagent
 - 实现钩子系统（hooks.py）：before/after hooks执行
 - 实现Spec获取与发现（spec_fetcher.py）：discover_spec和fetch_url的core逻辑
 - 实现Spec解析（spec_parser.py）：OpenAPI/Swagger → api-spec.json
-- 实现需求文档保存（requirements_saver.py）：保存为business-requirements.json
+- 实现需求文档保存（requirements_saver.py）：保存为 business-requirements.json + business-requirements.md（JSON供程序读取，MD供人工审阅）
 
 ## 文件范围
 
@@ -28,7 +28,7 @@ testmind/core/
 ├── hooks.py               # 钩子系统：before/after hooks执行
 ├── spec_fetcher.py        # Spec发现与下载：discover_spec + fetch_url
 ├── spec_parser.py         # Spec解析：OpenAPI/Swagger → api-spec.json
-└── requirements_saver.py  # 需求文档保存与校验
+└── requirements_saver.py  # 需求文档保存与校验（JSON + MD双文件）
 ```
 
 ## 依赖关系

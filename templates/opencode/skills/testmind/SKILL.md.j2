@@ -23,7 +23,7 @@ description: Use when user wants to perform testing tasks with TestMind. Route t
 | `fetch_url` | 下载任意 URL 内容到本地 | MVP |
 | `parse_spec` | 解析标准 Spec → api-spec.json | MVP |
 | `save_spec` | 保存提取结果 → api-spec.json | MVP |
-| `save_requirements` | 保存需求 → business-requirements.json | MVP |
+| `save_requirements` | 保存需求 → business-requirements.json + .md（引导审阅MD） | MVP |
 | `validate_case` | 校验用例格式 | MVP |
 | `save_case` | 保存用例到项目 | MVP |
 | `list_cases` | 列出项目用例 | MVP |
@@ -82,7 +82,7 @@ description: Use when user wants to perform testing tasks with TestMind. Route t
    └─ 本地文件 → parse_spec
 
 2. 分析需求（可选）
-   └─ 如有需求文档 → save_requirements
+   └─ 如有需求文档 → save_requirements（生成JSON+MD，引导审阅MD）
 
 3. 生成用例
    └─ validate_case → save_case
@@ -98,7 +98,7 @@ description: Use when user wants to perform testing tasks with TestMind. Route t
 
 ```
 1. 分析需求
-   └─ Agent 阅读 → save_requirements
+   └─ Agent 阅读 → save_requirements（生成JSON+MD，引导审阅MD）
 
 2. 获取 API 规范（如有）
    └─ fetch_url / parse_spec

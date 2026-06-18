@@ -96,10 +96,12 @@ async def save_spec(endpoints: list[dict], source_info: dict, project_name: str 
 
 
 async def save_requirements(requirements_data: dict, source_info: dict, project_name: str | None = None) -> dict:
-    """Save requirements data extracted by Claude Code in standardized format.
+    """Save requirements data as JSON + Markdown for human review.
 
-    Saves business requirements extracted from user documents or app exploration
-    as business-requirements.json for subsequent case generation.
+    Persists requirements as both business-requirements.json (machine-readable,
+    for downstream tooling) and business-requirements.md (human-readable, for
+    stakeholder review and approval). The Markdown file is auto-generated from
+    the JSON and kept in sync on every update.
     """
     from testmind.core.requirements_saver import RequirementsSaver
 

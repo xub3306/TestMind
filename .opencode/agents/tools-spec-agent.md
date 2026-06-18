@@ -13,7 +13,7 @@ mode: subagent
 - 实现 `fetch_url`：下载任意 URL 内容到本地
 - 实现 `parse_spec`：解析标准 OpenAPI/Swagger → api-spec.json
 - 实现 `save_spec`：保存 Claude Code 提取的接口信息为 api-spec.json
-- 实现 `save_requirements`：保存需求文档为 business-requirements.json
+- 实现 `save_requirements`：保存需求文档为 business-requirements.json + business-requirements.md（JSON供程序读取，MD供人工审阅）
 
 ## 文件范围
 
@@ -23,7 +23,7 @@ testmind/tools/
 ├── fetch_url.py             # MCP工具：下载URL内容到本地
 ├── parse_spec.py            # MCP工具：解析标准Spec → api-spec.json
 ├── save_spec.py             # MCP工具：保存AI提取结果 → api-spec.json
-└── save_requirements.py     # MCP工具：保存需求文档 → business-requirements.json
+└── save_requirements.py     # MCP工具：保存需求文档 → business-requirements.json + .md
 ```
 
 ## 依赖关系
@@ -68,8 +68,8 @@ testmind/tools/
 
 **save_requirements**：
 - 输入：`requirements_data: dict, source_info: dict, project_name?`
-- 输出：`{"requirements_path": "...", "modules_count": ..., "flows_count": ...}`
-- 保存为标准 testmind-requirements-1.0 格式
+- 输出：`{"requirements_path": "...", "markdown_path": "...", "modules_count": ..., "flows_count": ...}`
+- 保存为标准 testmind-requirements-1.0 格式（JSON + MD双文件）
 
 ## 输出要求
 

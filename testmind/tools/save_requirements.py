@@ -1,4 +1,4 @@
-"""MCP tool: save_requirements — persist business requirements as business-requirements.json."""
+"""MCP tool: save_requirements — persist business requirements as JSON + Markdown."""
 
 from __future__ import annotations
 
@@ -13,8 +13,10 @@ TOOL_DEF = types.Tool(
     name=TOOL_NAME,
     description=(
         "Save business requirements data in standardized format. "
-        "Persists requirements extracted from documents or app exploration as "
-        "business-requirements.json for subsequent test case generation."
+        "Persists requirements as both business-requirements.json (machine-readable) "
+        "and business-requirements.md (human-readable for review). "
+        "The Markdown file is generated automatically alongside the JSON file, "
+        "making it easy for stakeholders to review and approve requirements."
     ),
     inputSchema={
         "type": "object",

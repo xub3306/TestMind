@@ -189,7 +189,7 @@ swipe(session_id="emulator_a3f1_20260609", direction="up")
 
 ### `save_requirements(requirements_data: dict, source_info: dict, project_name: str | None = None) → dict`
 
-保存探索发现的业务流为标准化的 `business-requirements.json`。
+保存探索发现的业务流为标准化的 `business-requirements.json` + `business-requirements.md`（JSON供程序读取，MD供人工审阅）。
 
 **调用示例**：
 ```python
@@ -258,6 +258,7 @@ save_requirements(
 ```json
 {
   "requirements_path": "requirements/business-requirements.json",
+  "markdown_path": "requirements/business-requirements.md",
   "modules_count": 3,
   "flows_count": 12
 }
@@ -293,6 +294,7 @@ save_requirements(
 
 5. 整理并保存业务流
    └─ save_requirements(requirements_data={...}, source_info={...})
+   → 请引导用户打开 requirements/business-requirements.md 审阅需求
 ```
 
 ### 探索策略
@@ -377,7 +379,7 @@ save_requirements(
 
 ## 输出
 
-探索完成后的输出是 `requirements/business-requirements.json`，包含：
+探索完成后的输出是 `requirements/business-requirements.json` 和 `requirements/business-requirements.md`，包含：
 
 1. **modules** — 业务模块列表（如用户管理、订单管理）
 2. **flows** — 每个模块的用户操作流程（步骤序列）
@@ -385,7 +387,7 @@ save_requirements(
 4. **error_flows** — 异常场景和期望处理
 5. **business_rules** — 业务规则和约束
 
-此文件可直接供 `case-generator` 使用，结合 `api-spec.json` 生成全面的测试用例。
+JSON 文件供 `case-generator` 程序化使用，MD 文件供业务人员/产品经理人工审阅需求提取的完整性和准确性。
 
 ## 注意事项
 

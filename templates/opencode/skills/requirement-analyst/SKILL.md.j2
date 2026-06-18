@@ -136,7 +136,7 @@ save_spec(
 
 ### `save_requirements(requirements_data: dict, source_info: dict, project_name: str | None = None) → dict`
 
-保存业务需求为标准化的 `requirements/business-requirements.json`。
+保存业务需求为标准化的 `requirements/business-requirements.json` + `requirements/business-requirements.md`（JSON供程序读取，MD供人工审阅）。
 
 **调用示例**：
 ```python
@@ -190,12 +190,15 @@ save_requirements(
 ```json
 {
   "requirements_path": "requirements/business-requirements.json",
+  "markdown_path": "requirements/business-requirements.md",
   "modules_count": 3,
   "flows_count": 12
 }
 ```
 
 **使用建议**：
+- `save_requirements` 同时生成 JSON 和 MD 两个文件：JSON 供下游程序读取，MD 供业务人员/产品经理人工审阅
+- 保存完成后，请引导用户打开 `requirements/business-requirements.md` 审阅需求
 - `modules` → `flows` → `steps` 是三级结构，用于描述用户操作路径
 - `error_flows` 直接对应测试用例的逆向用例，务必记录完整
 - `business_rules` 直接对应边界值用例，数值型规则要注明边界值
@@ -240,7 +243,8 @@ save_requirements(
 
 4. 如文档包含业务需求信息：
    save_requirements(requirements_data={...}, source_info={"type": "html", "url": "..."})
-   → 保存为 requirements/business-requirements.json
+   → 保存为 requirements/business-requirements.json + business-requirements.md
+   → 请引导用户打开 business-requirements.md 审阅需求
 
 5. 告知用户：从文档中提取了 N 个接口，M 个业务流
    → 建议下一步：使用 case-generator 生成用例
@@ -298,6 +302,7 @@ save_requirements(
 3. save_requirements(requirements_data={...}, source_info={...})
 
 4. 告知用户：提取了 N 个模块、M 个业务流、K 条业务规则
+   → 引导用户打开 requirements/business-requirements.md 审阅需求
 ```
 
 ## 输出规范
@@ -379,3 +384,4 @@ save_requirements(
 - `save_spec` 的 endpoints 列表中，每个接口至少要覆盖一个成功响应和一个错误响应
 - `save_requirements` 的 business_rules 中，数值型规则要注明边界值（如「长度 6-20」→ 最小 6、最大 20）
 - 认证信息不要硬编码，使用环境变量名引用（如 `token_env: "API_TOKEN"`）
+- `save_requirements` 同时生成 JSON 和 MD 文件，MD 供人工审阅——保存后务必引导用户审阅 MD 文件
