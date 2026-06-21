@@ -102,7 +102,8 @@ def results(run_id: str, status_filter: str):
 
     results_data = get_results(config, run_id=run_id, status_filter=status_filter)
     for r in results_data:
-        status_icon = {"pass": "✓", "fail": "✗", "error": "!", "skipped": "○"}.get(r.status, "?")
+        # ASCII icons for cross-platform terminal safety (Windows GBK).
+        status_icon = {"pass": "PASS", "fail": "FAIL", "error": "ERR!", "skipped": "SKIP"}.get(r.status, "?")
         click.echo(f"  [{status_icon}] {r.case_id}: {r.status} ({r.duration_ms}ms)")
 
 
@@ -210,7 +211,7 @@ def validate(path: str):
 
     results = validate_cases(config, path)
     for r in results:
-        status = "✓" if r["valid"] else f"✗ {r['errors']}"
+        status = "OK" if r["valid"] else f"FAIL {r['errors']}"
         click.echo(f"  {r['case_id']}: {status}")
 
 

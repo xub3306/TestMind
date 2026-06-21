@@ -85,7 +85,11 @@ class SpecFetcher:
         base_url = base_url.rstrip("/")
         found: list[dict[str, Any]] = []
 
-        async with httpx.AsyncClient(timeout=10, verify=False) as client:
+        # trust_env=False avoids silently inheriting OS-level proxy
+        # settings (e.g. IE/Edge on Windows), which can reroute
+        # localhost traffic and produce misleading 502 responses.
+        # Mirrors the same fix applied in runner._send_request.
+        async with httpx.AsyncClient(timeout=10, verify=False, trust_env=False) as client:
             tasks = [
                 self._probe_url(client, base_url + path)
                 for path in DISCOVERY_PATHS_MVP
@@ -139,7 +143,8 @@ class SpecFetcher:
         project_name: str | None = None,
         save_path: str | None = None,
     ) -> FetchResult:
-        async with httpx.AsyncClient(timeout=30, verify=False) as client:
+        # trust_env=False — see discover_async for rationale.
+        async with httpx.AsyncClient(timeout=30, verify=False, trust_env=False) as client:
             resp = await client.get(url, follow_redirects=True)
             resp.raise_for_status()
 

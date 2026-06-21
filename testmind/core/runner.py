@@ -58,6 +58,20 @@ EXIT_CONFIG_ERROR = 10
 EXIT_MCP_SERVER_FAIL = 20
 
 
+def _workspace_dir(config: ProjectConfig) -> Path:
+    """Resolve the ``testmind/`` workspace directory for *config*.
+
+    Prefers ``config.project_dir`` (populated by
+    :func:`load_project_config`) so that case/result discovery works
+    independent of the current working directory.  Falls back to the
+    current working directory when ``project_dir`` is unset, preserving
+    backward compatibility with unit tests that build a bare
+    :class:`ProjectConfig`.
+    """
+    root = config.project_dir if config.project_dir is not None else Path(os.getcwd())
+    return root / "testmind"
+
+
 class Runner:
     """Core test execution engine.
 
@@ -69,6 +83,23 @@ class Runner:
     def __init__(self, config: ProjectConfig) -> None:
         self.config = config
         self.logger = get_run_logger("testmind.runner")
+
+    # ------------------------------------------------------------------
+    # Workspace resolution
+    # ------------------------------------------------------------------
+
+    def _get_workspace(self) -> Path:
+        """Resolve the project workspace root.
+
+        Prefers the config's resolved ``project_dir`` (set by
+        :func:`load_project_config`) so that the runner works correctly
+        regardless of the current working directory — this is essential
+        for the MCP server, which may be launched from any directory.
+        Falls back to the current working directory when ``project_dir``
+        is unset (e.g. in unit tests that construct a bare
+        :class:`ProjectConfig`).
+        """
+        return _workspace_dir(self.config)
 
     # ------------------------------------------------------------------
     # Public API
@@ -335,8 +366,8 @@ class Runner:
         request_snapshot = RequestSnapshot(
             method=request_data.get("method", ""),
             url=response_data.get("url", ""),
-            headers=request_data.get("headers", {}),
-            body=request_data.get("params", {}).get("body"),
+            headers=request_data.get("headers") or {},
+            body=(request_data.get("params") or {}).get("body"),
         )
         response_snapshot = ResponseSnapshot(
             status_code=response_data.get("status_code", 0),
@@ -549,7 +580,7 @@ class Runner:
         path = request_data.get("path", "/")
         url = f"{base_url}{path}"
 
-        headers = dict(request_data.get("headers", {}))
+        headers = dict(request_data.get("headers") or {})
         auth_header = self._build_auth_header(env_name)
         if auth_header:
             headers.update(auth_header)
@@ -560,21 +591,35 @@ class Runner:
 
         verify = self.config.verify_ssl
 
-        body = request_data.get("params", {}).get("body")
-        query = request_data.get("params", {}).get("query")
+        params = request_data.get("params") or {}
+        body = params.get("body")
+        query = params.get("query")
         timeout = float(context.get("timeout", self.config.timeout))
 
         start = datetime.now(timezone.utc)
-        response = httpx.request(
-            method=method,
-            url=url,
-            headers=headers,
-            json=body if isinstance(body, dict) else None,
-            params=query if isinstance(query, dict) else None,
-            timeout=timeout,
-            verify=verify,
-            proxy=proxy,
-        )
+        # Use an explicit Client so that ``trust_env`` is under our
+        # control.  When the project does not configure a proxy we set
+        # ``trust_env=False`` to avoid silently inheriting the OS-level
+        # proxy (e.g. IE/Edge settings on Windows), which can reroute
+        # localhost traffic and produce misleading 502 responses.  When
+        # the user explicitly configures a proxy we still disable
+        # ``trust_env`` and rely on the provided ``proxy`` argument so
+        # behaviour stays deterministic across machines.
+        client_kwargs: dict[str, Any] = {
+            "timeout": timeout,
+            "verify": verify,
+            "trust_env": False,
+        }
+        if proxy:
+            client_kwargs["proxy"] = proxy
+        with httpx.Client(**client_kwargs) as client:
+            response = client.request(
+                method=method,
+                url=url,
+                headers=headers,
+                json=body if isinstance(body, dict) else None,
+                params=query if isinstance(query, dict) else None,
+            )
         end = datetime.now(timezone.utc)
         duration_ms = int((end - start).total_seconds() * 1000)
 
@@ -721,11 +766,11 @@ class Runner:
         return context
 
     def _get_cases_dir(self) -> Path:
-        workspace = Path(os.getcwd()) / "testmind"
+        workspace = self._get_workspace()
         return workspace / "cases"
 
     def _get_results_dir(self, run_id: str) -> Path:
-        workspace = Path(os.getcwd()) / "testmind"
+        workspace = self._get_workspace()
         return workspace / "results" / run_id
 
     def _load_cases_from_dir(self, dir_path: Path) -> list[TestCase]:
@@ -769,16 +814,29 @@ class Runner:
         summary_file.write_text(summary.model_dump_json(indent=2), encoding="utf-8")
 
     def _print_summary(self, all_results: list[CaseResult], summary: SummaryResult) -> None:
-        """Print a human-readable summary of the run."""
+        """Print a human-readable summary of the run.
+
+        Uses ASCII status icons rather than Unicode glyphs (✓/✗/○) so
+        output stays safe on Windows legacy consoles that default to a
+        non-UTF-8 code page (e.g. GBK), where the Unicode symbols would
+        raise :class:`UnicodeEncodeError`.
+        """
         from rich.console import Console
+
         console = Console()
         console.print(f"\n{'='*50}")
         console.print(f"TestMind Run: {summary.run_id}")
         console.print(f"Project: {summary.project}  Env: {summary.env}")
         console.print(f"{'='*50}")
+        # ASCII icons for cross-platform terminal safety.
+        icon = {
+            "pass": "[green]PASS[/green]",
+            "fail": "[red]FAIL[/red]",
+            "error": "[yellow]ERR ![/yellow]",
+            "skipped": "[dim]SKIP[/dim]",
+        }.get  # type: ignore[assignment]
         for result in all_results:
-            icon = {"pass": "[green]✓[/green]", "fail": "[red]✗[/red]", "error": "[yellow]![/yellow]", "skipped": "[dim]○[/dim]"}.get(result.status, "?")
-            console.print(f"  {icon} {result.case_id}: {result.status} ({result.duration_ms}ms)")
+            console.print(f"  {icon(result.status, '?')} {result.case_id}: {result.status} ({result.duration_ms}ms)")
         console.print(f"\nTotal: {summary.total}  Pass: {summary.passed}  Fail: {summary.failed}  Error: {summary.error}  Skip: {summary.skipped}")
         console.print(f"Duration: {summary.total_duration_ms}ms")
         if summary.failures:
@@ -840,7 +898,7 @@ def validate_single_case(case_json: dict) -> _ValidationResult:
 
 
 def get_results(config: ProjectConfig, run_id: str | None = None, status_filter: str | None = None) -> list[CaseResult]:
-    results_dir = Path(os.getcwd()) / "testmind" / "results"
+    results_dir = _workspace_dir(config) / "results"
     if run_id:
         results_dir = results_dir / run_id
         if not results_dir.exists():
@@ -904,7 +962,7 @@ async def save_case_to_project(config: ProjectConfig, case_json: dict, project: 
     case = TestCase(**case_json)
     fingerprint = case.compute_fingerprint()
 
-    cases_dir = Path(os.getcwd()) / "testmind" / "cases"
+    cases_dir = _workspace_dir(config) / "cases"
     module_dir = cases_dir / case.id.split("-")[2].lower() if "-" in case.id else cases_dir / "default"
     module_dir.mkdir(parents=True, exist_ok=True)
 
@@ -926,7 +984,7 @@ async def save_case_to_project(config: ProjectConfig, case_json: dict, project: 
 
 
 def approve_cases(config: ProjectConfig, case_ids: list[str]) -> int:
-    cases_dir = Path(os.getcwd()) / "testmind" / "cases"
+    cases_dir = _workspace_dir(config) / "cases"
     pending_dir = cases_dir / ".pending"
     approved = 0
     for case_id in case_ids:
@@ -943,7 +1001,7 @@ def approve_cases(config: ProjectConfig, case_ids: list[str]) -> int:
 
 
 def cleanup_results(config: ProjectConfig, keep_last: int | None = None, before: str | None = None, clean_all: bool = False) -> int:
-    results_dir = Path(os.getcwd()) / "testmind" / "results"
+    results_dir = _workspace_dir(config) / "results"
     if not results_dir.exists():
         return 0
     if clean_all:
