@@ -387,3 +387,26 @@ class TestEndToEndPipeline:
         smoke = list_all_cases(project, tags=["smoke"])
         assert len(smoke) == 1
         assert smoke[0].tags == ["smoke"]
+
+    def test_run_generates_html_report(self, project: ProjectConfig, mock_api_server):
+        """After a run, report.html is generated alongside summary.json."""
+        case = {
+            "id": "TC-API-USERS-001",
+            "name": "List users",
+            "type": "api",
+            "priority": "P1",
+            "request": {"method": "GET", "path": "/api/users"},
+            "expect": {"status": 200},
+        }
+        asyncio.run(save_case_to_project(project, case))
+
+        runner = Runner(project)
+        run_id = runner.run(env="dev")
+
+        report_file = project.project_dir / "testmind" / "results" / run_id / "report.html"
+        assert report_file.is_file(), "report.html was not generated after run"
+        content = report_file.read_text(encoding="utf-8")
+        assert content.startswith("<!DOCTYPE html>")
+        assert run_id in content
+        assert "TC-API-USERS-001" in content
+        assert "Pass Rate: 100.0%" in content

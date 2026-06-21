@@ -142,9 +142,10 @@ def clean(keep_last: int, before: str, clean_all: bool):
     click.echo(f"Removed {removed} result directories.")
 
 
-@main.command()
+@main.command("discover-spec")
 @click.argument("base_url")
-def discover_spec(base_url: str):
+@click.option("--extended", is_flag=True, default=False, help="Probe extended path list (slower, more thorough)")
+def discover_spec(base_url: str, extended: bool):
     """Discover API specification URLs from a base URL."""
     from testmind.core.spec_fetcher import SpecFetcher
 
@@ -155,9 +156,12 @@ def discover_spec(base_url: str):
         sys.exit(EXIT_CONFIG_ERROR)
 
     fetcher = SpecFetcher(config)
-    found = fetcher.discover(base_url)
-    for item in found:
-        click.echo(f"  {item.url} ({item.format})")
+    result = fetcher.discover(base_url, extended=extended)
+    if not result.found:
+        click.echo("No API spec URLs found.")
+        return
+    for item in result.found:
+        click.echo(f"  {item['url']} ({item['format']})")
 
 
 @main.command()
@@ -292,3 +296,83 @@ def hooks_list(project_path: str):
         except Exception:
             pass
         click.echo(f"  {module_name}" + (f" - {doc}" if doc else ""))
+
+
+@main.command()
+@click.argument("run_id")
+@click.option("--project", "project_path", default=".", help="Project directory")
+def report(run_id: str, project_path: str):
+    """Generate an HTML report for a completed run.
+
+    Reads the JSON results under testmind/results/<run_id>/ and writes
+    a self-contained report.html in the same directory.  The report is
+    also generated automatically at the end of every ``testmind run``.
+    """
+    from pathlib import Path
+
+    from testmind.core.report import generate_html_report
+
+    project_dir = Path(project_path).resolve()
+    results_dir = project_dir / "testmind" / "results" / run_id
+    if not results_dir.is_dir():
+        click.echo(f"Run results not found: {results_dir}", err=True)
+        sys.exit(EXIT_CONFIG_ERROR)
+
+    try:
+        path = generate_html_report(results_dir)
+        click.echo(f"Report generated: {path}")
+    except FileNotFoundError as e:
+        click.echo(f"Report generation failed: {e}", err=True)
+        sys.exit(EXIT_HAS_ERROR)
+
+
+@main.group()
+def crypto():
+    """Manage encrypted secrets for project configurations."""
+
+
+@crypto.command("gen-key")
+def crypto_gen_key():
+    """Generate a new Fernet master key.
+
+    Print the key to stdout.  Persist it by exporting it as the
+    TESTMIND_MASTER_KEY environment variable (e.g. in your CI secret
+    store or ~/.bashrc).
+    """
+    from testmind.utils.crypto import generate_key, MASTER_KEY_ENV
+
+    key = generate_key()
+    click.echo(key)
+    click.echo(f"# Set this as ${MASTER_KEY_ENV} in your environment.", err=True)
+
+
+@crypto.command()
+@click.argument("plaintext")
+def encrypt(plaintext: str):
+    """Encrypt PLAINTEXT and print the enc:<token> string.
+
+    Requires TESTMIND_MASTER_KEY to be set in the environment.
+    """
+    from testmind.utils.crypto import encrypt as _encrypt, CryptoError
+
+    try:
+        click.echo(_encrypt(plaintext))
+    except CryptoError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(EXIT_CONFIG_ERROR)
+
+
+@crypto.command()
+@click.argument("cipher_value")
+def decrypt(cipher_value: str):
+    """Decrypt an enc:<token> string back to plaintext.
+
+    Requires TESTMIND_MASTER_KEY to be set in the environment.
+    """
+    from testmind.utils.crypto import decrypt as _decrypt, CryptoError
+
+    try:
+        click.echo(_decrypt(cipher_value))
+    except CryptoError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(EXIT_CONFIG_ERROR)

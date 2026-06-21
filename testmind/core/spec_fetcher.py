@@ -24,7 +24,26 @@ DISCOVERY_PATHS_EXTENDED = [
     "/docs",
     "/.well-known/openapi",
     "/openapi.yaml",
+    # Additional well-known locations observed in real-world projects.
+    "/api-docs/default",
+    "/swagger/v1/swagger.json",
+    "/swagger-ui/index.html",
+    "/redoc",
+    "/openapi/v3",
 ]
+
+
+def _discovery_paths(extended: bool = False) -> list[str]:
+    """Return the list of paths to probe.
+
+    With ``extended=False`` only the high-confidence MVP paths are
+    probed (fast, few requests).  With ``extended=True`` the extended
+    list is appended so less common but still well-known locations are
+    also checked.
+    """
+    if extended:
+        return DISCOVERY_PATHS_MVP + DISCOVERY_PATHS_EXTENDED
+    return list(DISCOVERY_PATHS_MVP)
 
 
 class SpecFetchResult:
@@ -62,7 +81,9 @@ class SpecFetcher:
     def __init__(self, config: Any | None = None) -> None:
         self.config = config
 
-    def discover(self, base_url: str, project_name: str | None = None) -> SpecFetchResult:
+    def discover(
+        self, base_url: str, project_name: str | None = None, extended: bool = False
+    ) -> SpecFetchResult:
         """Synchronous wrapper for :meth:`discover_async`."""
         try:
             loop = asyncio.get_running_loop()
@@ -71,19 +92,26 @@ class SpecFetcher:
         if loop and loop.is_running():
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, self.discover_async(base_url, project_name))
+                future = pool.submit(asyncio.run, self.discover_async(base_url, project_name, extended))
                 return future.result()
-        return asyncio.run(self.discover_async(base_url, project_name))
+        return asyncio.run(self.discover_async(base_url, project_name, extended))
 
-    async def discover_async(self, base_url: str, project_name: str | None = None) -> SpecFetchResult:
+    async def discover_async(
+        self, base_url: str, project_name: str | None = None, extended: bool = False
+    ) -> SpecFetchResult:
         """Discover API spec URLs from *base_url*.
 
         Args:
             base_url: The base URL to probe for spec endpoints.
             project_name: Optional project name (used to resolve config).
+            extended: When ``True``, also probe the extended path list
+                (``DISCOVERY_PATHS_EXTENDED``) in addition to the MVP
+                paths.  Useful when the MVP probe finds nothing and a
+                deeper scan is desired.
         """
         base_url = base_url.rstrip("/")
         found: list[dict[str, Any]] = []
+        paths = _discovery_paths(extended=extended)
 
         # trust_env=False avoids silently inheriting OS-level proxy
         # settings (e.g. IE/Edge on Windows), which can reroute
@@ -92,7 +120,7 @@ class SpecFetcher:
         async with httpx.AsyncClient(timeout=10, verify=False, trust_env=False) as client:
             tasks = [
                 self._probe_url(client, base_url + path)
-                for path in DISCOVERY_PATHS_MVP
+                for path in paths
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 

@@ -155,6 +155,30 @@ def load_project_config(project_path: str = ".") -> ProjectConfig:
     with open(config_file, encoding="utf-8") as f:
         data = json.load(f)
 
+    # Transparently decrypt any ``enc:`` values when a master key is
+    # available.  When the key is absent, values pass through unchanged
+    # so projects that do not use the crypto layer are unaffected.
+    data = _maybe_decrypt_config(data)
+
     config = ProjectConfig.model_validate(data)
     config.project_dir = project_dir
     return config
+
+
+def _maybe_decrypt_config(data: dict) -> dict:
+    """Decrypt encrypted values in *data* when a master key is configured.
+
+    Returns *data* unchanged when ``TESTMIND_MASTER_KEY`` is not set or
+    when the ``cryptography`` package is unavailable.  This keeps the
+    crypto feature strictly opt-in.
+    """
+    try:
+        from testmind.utils.crypto import decrypt_dict, CryptoError
+
+        return decrypt_dict(data)
+    except CryptoError:
+        # No master key configured — leave values as-is.
+        return data
+    except ImportError:
+        # cryptography not installed — crypto feature disabled.
+        return data

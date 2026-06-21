@@ -523,6 +523,7 @@ class Runner:
                         case, context, run_id, env_name, retry_count,
                         all_results, self._get_results_dir(run_id),
                     )
+                    all_results.append(result)
                     self._update_summary(summary, result)
             else:
                 # Run up to ``workers`` cases concurrently
@@ -538,6 +539,7 @@ class Runner:
                         futures.append(fut)
                     for fut in futures:
                         result = fut.result()
+                        all_results.append(result)
                         self._update_summary(summary, result)
 
     def _split_into_layers(self, ordered: list[TestCase]) -> list[list[TestCase]]:
@@ -812,6 +814,14 @@ class Runner:
             result_file.write_text(result.model_dump_json(indent=2), encoding="utf-8")
         summary_file = results_dir / "summary.json"
         summary_file.write_text(summary.model_dump_json(indent=2), encoding="utf-8")
+        # Generate a self-contained HTML report alongside the JSON files
+        # so users can open it directly from the filesystem.  Failure to
+        # generate the report must not fail the run.
+        try:
+            from testmind.core.report import generate_html_report
+            generate_html_report(results_dir)
+        except Exception as e:
+            self.logger.warning(f"HTML report generation failed: {e}")
 
     def _print_summary(self, all_results: list[CaseResult], summary: SummaryResult) -> None:
         """Print a human-readable summary of the run.

@@ -14,7 +14,9 @@ TOOL_DEF = types.Tool(
     description=(
         "Discover API specification URLs from a base URL by probing common paths. "
         "Tries well-known paths such as /v3/api-docs, /swagger.json, /openapi.json, "
-        "and returns all discovered Spec URLs with their formats."
+        "and returns all discovered Spec URLs with their formats. "
+        "Set extended=true to also probe less common but still well-known locations "
+        "(e.g. /swagger-resources, /.well-known/openapi, /api-docs/default)."
     ),
     inputSchema={
         "type": "object",
@@ -27,6 +29,14 @@ TOOL_DEF = types.Tool(
                 "type": "string",
                 "description": "Optional project name to resolve spec directory.",
             },
+            "extended": {
+                "type": "boolean",
+                "description": (
+                    "When true, probe the extended path list in addition to "
+                    "the MVP paths. Use when the fast probe finds nothing."
+                ),
+                "default": False,
+            },
         },
         "required": ["base_url"],
     },
@@ -36,6 +46,7 @@ TOOL_DEF = types.Tool(
 async def handle(arguments: dict, config) -> dict:
     """Execute discover_spec tool."""
     base_url = arguments["base_url"]
+    extended = arguments.get("extended", False)
     fetcher = SpecFetcher(config)
-    result = await fetcher.discover_async(base_url)
+    result = await fetcher.discover_async(base_url, extended=extended)
     return result.to_dict()

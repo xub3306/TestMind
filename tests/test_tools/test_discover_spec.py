@@ -156,3 +156,63 @@ class TestDiscoverSpecHandle:
     def test_handles_missing_base_url_arg(self):
         with pytest.raises(KeyError):
             asyncio.run(discover_spec.handle({}, config=None))
+
+
+class TestDiscoverSpecExtended:
+    """Cover the extended path probing mode."""
+
+    def test_discovery_paths_helper(self):
+        from testmind.core.spec_fetcher import _discovery_paths, DISCOVERY_PATHS_MVP, DISCOVERY_PATHS_EXTENDED
+
+        mvp = _discovery_paths(extended=False)
+        assert mvp == DISCOVERY_PATHS_MVP
+        assert "/v3/api-docs" in mvp
+
+        ext = _discovery_paths(extended=True)
+        assert len(ext) == len(DISCOVERY_PATHS_MVP) + len(DISCOVERY_PATHS_EXTENDED)
+        # MVP paths come first, extended paths appended.
+        assert ext[: len(DISCOVERY_PATHS_MVP)] == DISCOVERY_PATHS_MVP
+        # Extended-only paths are present.
+        assert "/.well-known/openapi" in ext
+        assert "/api-docs/default" in ext
+
+    def test_extended_probes_more_paths(self, tmp_path: Path):
+        """extended=True discovers a URL only present in the extended list."""
+        # Build a mock server that only serves an extended-only path.
+        openapi_doc = {"openapi": "3.0.0", "info": {"title": "X", "version": "1"}, "paths": {}}
+        _SpecProbeHandler.ROUTES = {
+            ("GET", "/.well-known/openapi"): {"status": 200, "body": openapi_doc},
+        }
+        port = _free_port()
+        server = ThreadingHTTPServer(("127.0.0.1", port), _SpecProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{port}"
+        try:
+            # MVP-only probe misses it.
+            r_mvp = asyncio.run(discover_spec.handle({"base_url": base}, config=None))
+            assert r_mvp["found"] == []
+            # Extended probe finds it.
+            r_ext = asyncio.run(
+                discover_spec.handle({"base_url": base, "extended": True}, config=None)
+            )
+            urls = {e["url"] for e in r_ext["found"]}
+            assert f"{base}/.well-known/openapi" in urls
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    def test_extended_count_exceeds_mvp(self, spec_server, tmp_path: Path):
+        """When the server serves both MVP and extended paths, extended
+        mode discovers at least as many URLs as MVP mode."""
+        # Add an extended-only route to the shared server's routes.
+        _SpecProbeHandler.ROUTES[("GET", "/swagger-resources")] = {
+            "status": 200,
+            "body": {"resources": []},
+        }
+        r_mvp = asyncio.run(discover_spec.handle({"base_url": spec_server["base_url"]}, config=None))
+        r_ext = asyncio.run(
+            discover_spec.handle({"base_url": spec_server["base_url"], "extended": True}, config=None)
+        )
+        assert len(r_ext["found"]) > len(r_mvp["found"])

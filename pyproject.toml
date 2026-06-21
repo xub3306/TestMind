@@ -37,6 +37,9 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
 ]
+crypto = [
+    "cryptography>=42.0",
+]
 
 [project.scripts]
 testmind = "testmind.cli:main"
