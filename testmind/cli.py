@@ -327,6 +327,103 @@ def report(run_id: str, project_path: str):
 
 
 @main.group()
+def suite():
+    """Manage test suites (group cases, set execution strategy)."""
+
+
+@suite.command("create")
+@click.argument("name")
+@click.option("--id", "suite_id", default=None, help="Suite ID (e.g. SUITE-LOGIN-001)")
+@click.option("--description", default="", help="Suite description")
+@click.option("--case", "cases", multiple=True, help="Case ID to include (repeatable)")
+@click.option("--case-dir", "case_dirs", multiple=True, help="Case directory to include (repeatable)")
+@click.option("--tag", "tags", multiple=True, help="Tag for filtering (repeatable)")
+@click.option("--setup", "setup", multiple=True, help="Setup hook script name (repeatable)")
+@click.option("--teardown", "teardown", multiple=True, help="Teardown hook script name (repeatable)")
+@click.option("--workers", type=int, default=None, help="Parallel workers (overrides CLI --workers)")
+@click.option("--retry", type=int, default=None, help="Retry count (overrides CLI --retry)")
+@click.option("--fail-fast", type=int, default=None, help="Stop after N consecutive failures (overrides CLI --fail-fast)")
+@click.option("--project", "project_path", default=".", help="Project directory")
+def suite_create(name, suite_id, description, cases, case_dirs, tags, setup, teardown, workers, retry, fail_fast, project_path):
+    """Create a new test suite JSON file under testmind/suites/."""
+    from pathlib import Path
+    import json as _json
+
+    project_dir = Path(project_path).resolve()
+    suites_dir = project_dir / "testmind" / "suites"
+    suites_dir.mkdir(parents=True, exist_ok=True)
+
+    suite_data = {
+        "name": name,
+        "description": description,
+        "tags": list(tags),
+        "cases": list(cases),
+        "case_dirs": list(case_dirs),
+        "setup": list(setup) if setup else None,
+        "teardown": list(teardown) if teardown else None,
+    }
+    if suite_id:
+        suite_data["id"] = suite_id
+    if workers is not None:
+        suite_data["workers"] = workers
+    if retry is not None:
+        suite_data["retry"] = retry
+    if fail_fast is not None:
+        suite_data["fail_fast"] = fail_fast
+
+    out_file = suites_dir / f"{name}.json"
+    out_file.write_text(_json.dumps(suite_data, ensure_ascii=False, indent=2), encoding="utf-8")
+    click.echo(f"Suite created: {out_file}")
+
+
+@suite.command("list")
+@click.option("--project", "project_path", default=".", help="Project directory")
+def suite_list(project_path):
+    """List all test suites in the project."""
+    from pathlib import Path
+    import json as _json
+
+    project_dir = Path(project_path).resolve()
+    suites_dir = project_dir / "testmind" / "suites"
+    if not suites_dir.is_dir():
+        click.echo("No suites directory found.")
+        return
+
+    files = sorted(suites_dir.glob("*.json"))
+    if not files:
+        click.echo("No suites found.")
+        return
+
+    click.echo("Test suites:")
+    for f in files:
+        try:
+            data = _json.loads(f.read_text(encoding="utf-8"))
+            name = data.get("name", f.stem)
+            count = len(data.get("cases", [])) + len(data.get("case_dirs", []))
+            click.echo(f"  {f.stem}: {name} ({count} entries)")
+        except Exception:
+            click.echo(f"  {f.stem}: <invalid JSON>")
+
+
+@suite.command("show")
+@click.argument("name")
+@click.option("--project", "project_path", default=".", help="Project directory")
+def suite_show(name, project_path):
+    """Show the contents of a test suite."""
+    from pathlib import Path
+    import json as _json
+
+    project_dir = Path(project_path).resolve()
+    suite_file = project_dir / "testmind" / "suites" / f"{name}.json"
+    if not suite_file.is_file():
+        click.echo(f"Suite not found: {suite_file}", err=True)
+        sys.exit(EXIT_CONFIG_ERROR)
+
+    data = _json.loads(suite_file.read_text(encoding="utf-8"))
+    click.echo(_json.dumps(data, ensure_ascii=False, indent=2))
+
+
+@main.group()
 def crypto():
     """Manage encrypted secrets for project configurations."""
 

@@ -1,6 +1,9 @@
 """TestMind test suite data model.
 
 A suite groups test cases by ID or directory for organised execution.
+A suite can also carry its own execution strategy (workers, retry,
+fail_fast) that overrides the project/CLI defaults when the suite is
+selected.
 """
 
 from __future__ import annotations
@@ -22,6 +25,15 @@ class TestSuite(BaseModel):
         setup: Hook scripts to run before the entire suite.
         teardown: Hook scripts to run after the entire suite (always
             executed).
+        workers: Number of parallel workers to use for this suite.
+            When ``None`` (default), the value passed to ``run`` /
+            ``--workers`` is used.
+        retry: Number of retries for failed cases within this suite.
+            When ``None``, the value passed to ``run`` / ``--retry`` is
+            used.
+        fail_fast: Stop after this many consecutive failures (0 =
+            disabled).  When ``None``, the value passed to ``run`` /
+            ``--fail-fast`` is used.
     """
 
     id: str = ""
@@ -32,3 +44,6 @@ class TestSuite(BaseModel):
     case_dirs: list[str] = Field(default_factory=list)
     setup: list[str] | None = None
     teardown: list[str] | None = None
+    workers: int | None = None
+    retry: int | None = None
+    fail_fast: int | None = None

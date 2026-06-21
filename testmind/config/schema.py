@@ -220,6 +220,9 @@ SUITE_SCHEMA: dict[str, Any] = {
         "case_dirs": {"type": "array", "items": {"type": "string"}},
         "setup": {"type": "array", "items": {"type": "string"}},
         "teardown": {"type": "array", "items": {"type": "string"}},
+        "workers": {"type": ["integer", "null"], "minimum": 1},
+        "retry": {"type": ["integer", "null"], "minimum": 0},
+        "fail_fast": {"type": ["integer", "null"], "minimum": 0},
     },
 }
 

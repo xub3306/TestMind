@@ -121,11 +121,21 @@ class Runner:
         """Run collected test cases synchronously.
 
         Returns the ``run_id`` for result retrieval.
+
+        When *suite* is provided, the suite's own ``setup`` / ``teardown``
+        hooks are executed around the run, and the suite's ``workers``,
+        ``retry`` and ``fail_fast`` fields override the corresponding
+        arguments when set.
         """
         env_name = env or self.config.default_env
         env_config = self.config.get_env_config(env_name)
         run_id = _generate_run_id()
         self.logger.info(f"Starting run {run_id} with env={env_name}")
+
+        # Load the suite definition (if any) so we can apply its strategy
+        # overrides and setup/teardown hooks.  ``_collect_cases`` also
+        # loads it, but we load it here once to avoid double disk I/O.
+        suite_obj = self._load_suite(suite) if suite else None
 
         cases = self._collect_cases(target=target, tags=tags, suite=suite)
         cases = self._filter_cases(cases, env_name=env_name)
@@ -133,6 +143,15 @@ class Runner:
 
         results_dir = self._get_results_dir(run_id)
         results_dir.mkdir(parents=True, exist_ok=True)
+
+        # Apply suite-level strategy overrides (None = keep caller value).
+        if suite_obj is not None:
+            if suite_obj.workers is not None:
+                workers = suite_obj.workers
+            if suite_obj.retry is not None:
+                retry = suite_obj.retry
+            if suite_obj.fail_fast is not None:
+                fail_fast = suite_obj.fail_fast
 
         retry_count = retry if retry is not None else self.config.retry
         context = self._build_context(env_config, variables or {})
@@ -154,10 +173,26 @@ class Runner:
             errors=[],
         )
 
+        # Global setup (project-level) runs first.
         self._execute_setup(context)
 
+        # Suite-level setup hooks run after project setup but before any
+        # case executes.  Errors here abort the run (same semantics as
+        # before-hooks on individual cases).
+        suite_setup_failed = False
+        if suite_obj is not None and suite_obj.setup:
+            try:
+                from testmind.core.hooks import execute_hooks
+                execute_hooks(suite_obj.setup, context, "before")
+            except Exception as e:
+                self.logger.error(f"Suite setup hook failed: {e}")
+                suite_setup_failed = True
+
         try:
-            if workers > 1:
+            if suite_setup_failed:
+                # Skip case execution; teardown still runs.
+                self.logger.info("Skipping case execution due to suite setup failure")
+            elif workers > 1:
                 # Concurrent execution: split into layers by topology, run each layer concurrently
                 self._execute_concurrent(ordered, context, run_id, env_name, retry_count, workers, all_results, summary, fail_fast)
             else:
@@ -176,6 +211,13 @@ class Runner:
                         self.logger.info(f"Fail-fast triggered after {consecutive_failures} consecutive failures")
                         break
         finally:
+            # Suite-level teardown (best-effort, errors are logged but not raised).
+            if suite_obj is not None and suite_obj.teardown:
+                try:
+                    from testmind.core.hooks import execute_hooks
+                    execute_hooks(suite_obj.teardown, context, "after")
+                except Exception as e:
+                    self.logger.warning(f"Suite teardown hook error: {e}")
             self._execute_teardown(context)
 
         summary.total = len(all_results)
@@ -757,6 +799,11 @@ class Runner:
 
     def _build_context(self, env_config: Any, variables: dict[str, Any]) -> dict:
         context: dict[str, Any] = {}
+        # Expose the resolved project_dir so hook scripts can locate
+        # project resources (hooks/, cases/, etc.) without relying on
+        # the current working directory.
+        if self.config.project_dir is not None:
+            context["project_dir"] = str(self.config.project_dir)
         context.update(self.config.variables or {})
         if env_config and hasattr(env_config, "variables"):
             context.update(env_config.variables or {})
@@ -916,6 +963,10 @@ def get_results(config: ProjectConfig, run_id: str | None = None, status_filter:
     results: list[CaseResult] = []
     for result_file in results_dir.rglob("*.json"):
         if result_file.name == "summary.json":
+            continue
+        # Skip retry detail files (e.g. TC-X_retry_1.json) — those are
+        # per-attempt snapshots, not top-level case results.
+        if "_retry_" in result_file.stem:
             continue
         try:
             data = json.loads(result_file.read_text(encoding="utf-8"))
