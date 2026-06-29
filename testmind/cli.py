@@ -524,6 +524,90 @@ def case_show(case_id, project_path):
     click.echo(_json.dumps(data, ensure_ascii=False, indent=2))
 
 
+@main.command()
+@click.option("--project", "project_path", default=".", help="Project directory")
+@click.option("--top", "top_n", default=10, help="Number of top failures to show")
+@click.option("--html", "output_html", is_flag=True, help="Generate an HTML analysis report")
+def analyze(project_path, top_n, output_html):
+    """Analyze test results across all runs.
+
+    Shows pass rate trend, top failing cases, and duration statistics.
+    With --html, generates a self-contained HTML report alongside the
+    terminal output.
+    """
+    from testmind.core.analyze import (
+        compute_duration_trend,
+        compute_overview,
+        compute_pass_rate_trend,
+        compute_top_failures,
+        load_run_history,
+    )
+
+    try:
+        config = load_project_config(project_path)
+    except FileNotFoundError as e:
+        click.echo(f"Configuration error: {e}", err=True)
+        sys.exit(EXIT_CONFIG_ERROR)
+
+    history = load_run_history(config)
+    if not history:
+        click.echo("No test runs found.")
+        return
+
+    overview = compute_overview(history)
+    trend = compute_pass_rate_trend(history)
+    top = compute_top_failures(history, top_n)
+    dur = compute_duration_trend(history)
+
+    # ---- Terminal output ----
+    click.echo(f"\nTestMind Analysis — {overview['total_runs']} runs, "
+               f"{overview['total_cases']} cases total\n")
+    click.echo(f"  Avg pass rate: {overview['avg_pass_rate']}%")
+    click.echo(f"  Avg duration:  {overview['avg_duration_ms']} ms")
+    click.echo(f"  Total passed:  {overview['total_passed']}")
+    click.echo(f"  Total failed:  {overview['total_failed']}")
+    click.echo(f"  Total errors:  {overview['total_errors']}")
+    click.echo("")
+
+    # Pass rate trend (last 10 runs max for brevity).
+    click.echo("Pass rate trend (recent):")
+    recent = trend[-10:]
+    for t in recent:
+        bar = "#" * int(t["pass_rate"] // 5)
+        click.echo(f"  {t['run_id'][:15]}: {bar} {t['pass_rate']}% ({t['total']} cases)")
+    click.echo("")
+
+    # Top failures.
+    if top:
+        click.echo(f"Top failures:")
+        for item in top:
+            click.echo(f"  {item['case_id']}: {item['failures']} failures")
+        click.echo("")
+
+    # Duration trend (recent).
+    click.echo("Duration trend (recent):")
+    for d in dur[-5:]:
+        click.echo(f"  {d['run_id'][:15]}: {d['total_duration_ms']}ms "
+                   f"({d['avg_per_case_ms']}ms/case)")
+    click.echo("")
+
+    # ---- HTML report (optional) ----
+    if output_html:
+        try:
+            from testmind.core.analyze_html import render_analysis_html
+        except ImportError:
+            click.echo("HTML report feature not available (install from source).", err=True)
+            return
+
+        results_dir = config.project_dir / "testmind" / "results" / "analysis"
+        results_dir.mkdir(parents=True, exist_ok=True)
+        html_path = results_dir / "analysis.html"
+        html_path.write_text(
+            render_analysis_html(overview, trend, top, dur), encoding="utf-8"
+        )
+        click.echo(f"HTML analysis: {html_path}")
+
+
 @main.group()
 def crypto():
     """Manage encrypted secrets for project configurations."""
