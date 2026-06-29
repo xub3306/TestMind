@@ -609,6 +609,102 @@ def analyze(project_path, top_n, output_html):
 
 
 @main.group()
+def perf():
+    """Performance testing — benchmark HTTP endpoints."""
+
+
+@perf.command("run")
+@click.argument("url")
+@click.option("--method", default="GET", help="HTTP method")
+@click.option("--warmups", type=int, default=2, help="Warm-up rounds (excluded from stats)")
+@click.option("--rounds", type=int, default=20, help="Measurement rounds")
+@click.option("--max-avg", "max_avg_ms", type=float, default=None, help="Fail if avg > N ms")
+@click.option("--baseline", is_flag=True, help="Save this run as the performance baseline")
+@click.option("--compare", is_flag=True, help="Compare against stored baseline")
+def perf_run(url, method, warmups, rounds, max_avg_ms, baseline, compare):
+    """Run a performance benchmark against a URL."""
+    from testmind.core.perf import (
+        compare_to_baseline,
+        load_baseline,
+        run_perf_test,
+        save_baseline,
+    )
+
+    click.echo(f"Benchmarking {method} {url} ({warmups} warm-ups + {rounds} rounds)...")
+    result = run_perf_test(url, method=method, warmups=warmups, rounds=rounds,
+                           max_avg_ms=max_avg_ms)
+
+    s = result["stats"]
+    click.echo(f"\n  Success: {result['success']}/{result['rounds']}  Errors: {result['errors']}")
+    click.echo(f"  Min: {s['min_ms']}ms  Max: {s['max_ms']}ms  Avg: {s['avg_ms']}ms")
+    click.echo(f"  p50: {s['median_ms (p50)']}ms  p90: {s['p90_ms']}ms  "
+               f"p95: {s['p95_ms']}ms  p99: {s['p99_ms']}ms")
+    click.echo(f"  StdDev: {s['stddev_ms']}ms")
+
+    if "threshold_pass" in result:
+        status = "PASS" if result["threshold_pass"] else "FAIL"
+        click.echo(f"  Threshold (avg < {max_avg_ms}ms): {status}")
+
+    if compare:
+        try:
+            config = load_project_config(".")
+            baseline_data = load_baseline(config)
+        except Exception:
+            baseline_data = None
+        if baseline_data:
+            comp = compare_to_baseline(result, baseline_data)
+            click.echo(f"\n  Baseline regression: {'YES' if comp['regression'] else 'NO'}")
+            for k, v in comp["details"].items():
+                click.echo(f"    {k}: {v['old']}ms -> {v['new']}ms ({v['delta_pct']:+.1f}%)" if v['delta_pct'] >= 0
+                           else f"    {k}: {v['old']}ms -> {v['new']}ms ({v['delta_pct']:.1f}%)")
+
+    if baseline:
+        try:
+            config = load_project_config(".")
+            path = save_baseline(config, result)
+            click.echo(f"\n  Baseline saved: {path}")
+        except Exception:
+            click.echo("  (no project directory — baseline not saved)")
+
+
+@main.group()
+def security():
+    """Security testing — scan for common web vulnerabilities."""
+
+
+@security.command("scan")
+@click.argument("base_url")
+@click.option("--path", default="/api/users", help="Endpoint path to scan")
+@click.option("--param", "param_name", default="q", help="Query parameter to inject into")
+@click.option("--sqli/--no-sqli", default=True, help="Include SQL injection tests")
+@click.option("--xss/--no-xss", default=True, help="Include XSS tests")
+@click.option("--traversal/--no-traversal", default=True, help="Include path traversal tests")
+def security_scan(base_url, path, param_name, sqli, xss, traversal):
+    """Run a quick security scan against an endpoint.
+
+    Sends SQL injection, XSS, and path traversal payloads and reports
+    any potential vulnerabilities found in the response.
+    """
+    from testmind.core.security import run_security_scan
+
+    click.echo(f"Scanning {base_url}{path} ...")
+    report = run_security_scan(
+        base_url, path=path, param_name=param_name,
+        include_sqli=sqli, include_xss=xss, include_path_traversal=traversal,
+    )
+    click.echo(f"\n  Payloads sent: {report['total_payloads']}")
+    click.echo(f"  Vulnerabilities found: {report['vulnerabilities_found']}")
+    if report["findings"]:
+        click.echo(f"\n  Findings:")
+        for f in report["findings"]:
+            cat = f["category"].upper()
+            click.echo(f"    [{cat}] {f['payload'][:60]}")
+            click.echo(f"           {f['detail']}")
+    else:
+        click.echo("  No vulnerabilities detected.")
+
+
+@main.group()
 def crypto():
     """Manage encrypted secrets for project configurations."""
 
