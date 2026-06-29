@@ -40,6 +40,9 @@ dev = [
 crypto = [
     "cryptography>=42.0",
 ]
+web = [
+    "playwright>=1.40",
+]
 
 [project.scripts]
 testmind = "testmind.cli:main"

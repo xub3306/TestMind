@@ -69,6 +69,15 @@ _ALL_TOOLS: list[tuple[str, types.Tool, Any]] = [
 for _pname, _pdef in _project_tools:
     _ALL_TOOLS.append((_pname, _pdef, _project_handlers[_pname]))
 
+# Web UI tools (optional — registered when Playwright is installed).
+try:
+    from testmind.tools.web_tools import TOOLS as _web_tools, HANDLERS as _web_handlers
+
+    for _wname, _wdef in _web_tools:
+        _ALL_TOOLS.append((_wname, _wdef, _web_handlers[_wname]))
+except ImportError:
+    pass  # Playwright not installed — web tools unavailable.
+
 
 def register_all(server: Server, config) -> None:
     """Register every TestMind tool with *server*.
