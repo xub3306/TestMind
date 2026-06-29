@@ -221,12 +221,13 @@ def validate(path: str):
 
 @main.command()
 @click.argument("ids")
-def approve(ids: str):
+@click.option("--project", "project_path", default=".", help="Project directory")
+def approve(ids, project_path):
     """Approve pending test cases by IDs (comma-separated)."""
     from testmind.core.runner import approve_cases
 
     try:
-        config = load_project_config()
+        config = load_project_config(project_path)
     except FileNotFoundError as e:
         click.echo(f"Configuration error: {e}", err=True)
         sys.exit(EXIT_CONFIG_ERROR)
@@ -420,6 +421,106 @@ def suite_show(name, project_path):
         sys.exit(EXIT_CONFIG_ERROR)
 
     data = _json.loads(suite_file.read_text(encoding="utf-8"))
+    click.echo(_json.dumps(data, ensure_ascii=False, indent=2))
+
+
+@main.group()
+def case():
+    """Manage test cases (review, history, version tracking)."""
+
+
+@case.command("pending")
+@click.option("--project", "project_path", default=".", help="Project directory")
+def case_pending(project_path):
+    """List test cases awaiting approval (.pending/ directory)."""
+    from testmind.core.runner import list_pending_cases
+
+    try:
+        config = load_project_config(project_path)
+    except FileNotFoundError as e:
+        click.echo(f"Configuration error: {e}", err=True)
+        sys.exit(EXIT_CONFIG_ERROR)
+
+    pending = list_pending_cases(config)
+    if not pending:
+        click.echo("No pending cases.")
+        return
+    click.echo(f"Pending cases ({len(pending)}):")
+    for p in pending:
+        click.echo(f"  {p['case_id']}: {p['name']}")
+
+
+@case.command("reject")
+@click.argument("ids")
+@click.option("--project", "project_path", default=".", help="Project directory")
+def case_reject(ids, project_path):
+    """Reject pending test cases by IDs (comma-separated). Deletes from .pending/."""
+    from testmind.core.runner import reject_cases
+
+    try:
+        config = load_project_config(project_path)
+    except FileNotFoundError as e:
+        click.echo(f"Configuration error: {e}", err=True)
+        sys.exit(EXIT_CONFIG_ERROR)
+
+    case_ids = [i.strip() for i in ids.split(",")]
+    rejected = reject_cases(config, case_ids)
+    click.echo(f"Rejected {rejected} cases.")
+
+
+@case.command("history")
+@click.argument("case_id")
+@click.option("--project", "project_path", default=".", help="Project directory")
+def case_history(case_id, project_path):
+    """Show the version history and changelog for a test case."""
+    from testmind.core.runner import get_case_history
+
+    try:
+        config = load_project_config(project_path)
+    except FileNotFoundError as e:
+        click.echo(f"Configuration error: {e}", err=True)
+        sys.exit(EXIT_CONFIG_ERROR)
+
+    data = get_case_history(config, case_id)
+    if data is None:
+        click.echo(f"Case not found: {case_id}", err=True)
+        sys.exit(EXIT_CONFIG_ERROR)
+
+    meta = data.get("metadata", {})
+    click.echo(f"Case ID:    {data['id']}")
+    click.echo(f"Name:       {data['name']}")
+    click.echo(f"Priority:   {data.get('priority', '')}")
+    click.echo(f"Version:    {meta.get('version', 1)}")
+    click.echo(f"Created:    {meta.get('created_at', '')}")
+    click.echo(f"Updated:    {meta.get('updated_at', '')}")
+    changelog = meta.get("changelog")
+    if changelog:
+        click.echo("\nChangelog:")
+        for entry in changelog:
+            click.echo(f"  v{entry.get('version', '?')} [{entry.get('date', '')}] {entry.get('message', '')} by {entry.get('author', '?')}")
+    else:
+        click.echo("\nChangelog: (no entries)")
+
+
+@case.command("show")
+@click.argument("case_id")
+@click.option("--project", "project_path", default=".", help="Project directory")
+def case_show(case_id, project_path):
+    """Show the full JSON content of a test case."""
+    from testmind.core.runner import get_case_history
+
+    try:
+        config = load_project_config(project_path)
+    except FileNotFoundError as e:
+        click.echo(f"Configuration error: {e}", err=True)
+        sys.exit(EXIT_CONFIG_ERROR)
+
+    data = get_case_history(config, case_id)
+    if data is None:
+        click.echo(f"Case not found: {case_id}", err=True)
+        sys.exit(EXIT_CONFIG_ERROR)
+
+    import json as _json
     click.echo(_json.dumps(data, ensure_ascii=False, indent=2))
 
 

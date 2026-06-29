@@ -1040,11 +1040,23 @@ async def save_case_to_project(config: ProjectConfig, case_json: dict, project: 
         return {"status": "pending_review", "message": f"Case {case.id} already exists, saved to .pending/", "path": str(pending_file)}
 
     case_file = module_dir / f"{case.id}.json"
+    # Auto-inject metadata for new cases so version tracking works from
+    # the start even if the Agent didn't supply it.
+    if "metadata" not in case_json:
+        case_json["metadata"] = {"version": 1, "author": "testmind",
+                                  "created_at": datetime.now(timezone.utc).isoformat(),
+                                  "updated_at": datetime.now(timezone.utc).isoformat()}
     case_file.write_text(json.dumps(case_json, indent=2, ensure_ascii=False), encoding="utf-8")
     return {"status": "saved", "path": str(case_file), "case_id": case.id}
 
 
 def approve_cases(config: ProjectConfig, case_ids: list[str]) -> int:
+    """Approve pending cases, auto-incrementing version on updates.
+
+    When an approved case overwrites an existing one, the version is
+    bumped and a changelog entry recording the update is appended so
+    that every modification is traceable.
+    """
     cases_dir = _workspace_dir(config) / "cases"
     pending_dir = cases_dir / ".pending"
     approved = 0
@@ -1053,12 +1065,100 @@ def approve_cases(config: ProjectConfig, case_ids: list[str]) -> int:
         if pending_file.exists():
             data = json.loads(pending_file.read_text(encoding="utf-8"))
             case = TestCase(**data)
-            module_dir = cases_dir / (case.id.split("-")[2].lower() if "-" in case.id and len(case.id.split("-")) > 2 else "default")
+            module_dir = _case_module_dir(cases_dir, case.id)
             module_dir.mkdir(parents=True, exist_ok=True)
             target = module_dir / f"{case.id}.json"
-            pending_file.rename(target)
+
+            # Auto-increment version when overwriting an existing case.
+            if target.exists():
+                try:
+                    old_data = json.loads(target.read_text(encoding="utf-8"))
+                    old_case = TestCase(**old_data)
+                    old_version = old_case.metadata.version if old_case.metadata else 1
+                    # Build a mutable dict for the new metadata so we can
+                    # increment fields regardless of whether the incoming
+                    # case already carries metadata.
+                    if case.metadata is not None:
+                        new_meta = case.metadata.model_dump()
+                    else:
+                        new_meta = {"version": 1, "author": "testmind",
+                                    "created_at": old_case.metadata.created_at if old_case.metadata else "",
+                                    "updated_at": datetime.now(timezone.utc).isoformat()}
+                    new_meta["version"] = old_version + 1
+                    new_meta["updated_at"] = datetime.now(timezone.utc).isoformat()
+                    author = new_meta.get("author", "testmind")
+                    # Append changelog entry.
+                    entry = {
+                        "version": new_meta["version"],
+                        "date": new_meta["updated_at"],
+                        "author": author,
+                        "message": "Approved case update",
+                    }
+                    existing_log = (old_case.metadata.changelog or []) if old_case.metadata else []
+                    new_meta["changelog"] = existing_log + [entry]
+                    data["metadata"] = new_meta
+                    case = TestCase(**data)
+                except Exception:
+                    pass  # best-effort versioning; write new data regardless
+
+            target.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            pending_file.unlink()
             approved += 1
     return approved
+
+
+def reject_cases(config: ProjectConfig, case_ids: list[str]) -> int:
+    """Delete pending case files (reject the proposed changes)."""
+    cases_dir = _workspace_dir(config) / "cases"
+    pending_dir = cases_dir / ".pending"
+    rejected = 0
+    for case_id in case_ids:
+        pending_file = pending_dir / f"{case_id}.json"
+        if pending_file.exists():
+            pending_file.unlink()
+            rejected += 1
+    return rejected
+
+
+def list_pending_cases(config: ProjectConfig) -> list[dict]:
+    """Return a list of pending case metadata dicts."""
+    cases_dir = _workspace_dir(config) / "cases"
+    pending_dir = cases_dir / ".pending"
+    if not pending_dir.is_dir():
+        return []
+    result = []
+    for pf in sorted(pending_dir.glob("*.json")):
+        try:
+            data = json.loads(pf.read_text(encoding="utf-8"))
+            result.append({"case_id": data.get("id", pf.stem), "name": data.get("name", ""),
+                           "priority": data.get("priority", ""), "type": data.get("type", "")})
+        except Exception:
+            continue
+    return result
+
+
+def get_case_history(config: ProjectConfig, case_id: str) -> dict | None:
+    """Return the full case JSON with version/changelog metadata.
+
+    Returns ``None`` if the case does not exist.
+    """
+    cases_dir = _workspace_dir(config) / "cases"
+    existing = _find_case_by_id(cases_dir, case_id)
+    if not existing:
+        return None
+    try:
+        data = json.loads(Path(existing).read_text(encoding="utf-8"))
+        return data
+    except Exception:
+        return None
+
+
+def _case_module_dir(cases_dir: Path, case_id: str) -> Path:
+    """Resolve the module subdirectory for *case_id*."""
+    parts = case_id.split("-")
+    if len(parts) >= 3:
+        return cases_dir / parts[2].lower()
+    return cases_dir / "default"
 
 
 def cleanup_results(config: ProjectConfig, keep_last: int | None = None, before: str | None = None, clean_all: bool = False) -> int:
@@ -1110,7 +1210,7 @@ def _find_case_by_id(cases_dir: Path, case_id: str) -> str | None:
         try:
             data = json.loads(json_file.read_text(encoding="utf-8"))
             if data.get("id") == case_id:
-                return case_id
+                return str(json_file)
         except Exception:
             continue
     return None
