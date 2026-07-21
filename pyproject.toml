@@ -23,11 +23,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
-[project.urls]
-Homepage = "https://github.com/xub3306/TestMind"
-Repository = "https://github.com/xub3306/TestMind.git"
-Issues = "https://github.com/xub3306/TestMind/issues"
-
 dependencies = [
     "mcp>=1.0",
     "click>=8.0",
@@ -37,6 +32,11 @@ dependencies = [
     "rich>=13.0",
     "jinja2>=3.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/xub3306/TestMind"
+Repository = "https://github.com/xub3306/TestMind.git"
+Issues = "https://github.com/xub3306/TestMind/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -62,6 +62,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["testmind"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"templates" = "templates"
 
 [tool.hatch.build.targets.sdist]
 include = [
