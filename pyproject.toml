@@ -1,23 +1,32 @@
 [project]
-name = "testmind"
-version = "0.1.0"
-description = "Open-source intelligent testing AI platform - MCP Server + Agent hybrid architecture"
+name = "testmind-ai"
+version = "0.5.0"
+description = "Open-source intelligent testing AI platform — MCP Server + Agent hybrid architecture. Generate, execute, and analyze API/Web/Mobile tests with AI-powered tooling."
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [
-    {name = "TestMind Team"}
+    {name = "TestMind Team", email = "xub3306@gmail.com"}
 ]
-keywords = ["testing", "ai", "mcp", "api-testing", "automation"]
+keywords = ["testing", "ai", "mcp", "api-testing", "automation", "llm", "openapi", "cli"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Testing",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
+
+[project.urls]
+Homepage = "https://github.com/xub3306/TestMind"
+Repository = "https://github.com/xub3306/TestMind.git"
+Issues = "https://github.com/xub3306/TestMind/issues"
 
 dependencies = [
     "mcp>=1.0",
@@ -50,6 +59,18 @@ testmind = "testmind.cli:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["testmind"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/testmind",
+    "/templates",
+    "/README.md",
+    "/LICENSE",
+    "/pyproject.toml",
+]
 
 [tool.ruff]
 target-version = "py310"

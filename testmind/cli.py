@@ -4,12 +4,13 @@ import sys
 
 import click
 
+from testmind import __version__
 from testmind.config.settings import load_project_config
 from testmind.core.runner import EXIT_CONFIG_ERROR, EXIT_HAS_ERROR, EXIT_HAS_FAIL
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="testmind")
+@click.version_option(version=__version__, prog_name="testmind")
 def main():
     """TestMind - Intelligent testing AI platform."""
     pass
